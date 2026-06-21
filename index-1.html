@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Timed Reveal</title>
+<style>
+  :root {
+    --bg: #0d0d0d;
+    --surface: #161616;
+    --border: #2a2a2a;
+    --accent: #c8a96e;
+    --text: #e8e8e8;
+    --muted: #555;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: Georgia, serif;
+    min-height: 100vh;
+    padding: 2rem 1rem;
+  }
+  header { text-align: center; margin-bottom: 2.5rem; }
+  header h1 {
+    font-size: clamp(1.4rem, 4vw, 2rem);
+    font-weight: 400;
+    letter-spacing: 0.12em;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+  header p {
+    margin-top: 0.4rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+    font-family: monospace;
+    letter-spacing: 0.05em;
+  }
+  #progress-wrap {
+    max-width: 900px;
+    margin: 0 auto 2rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  #progress-label {
+    padding: 0.5rem 0.75rem;
+    font-family: monospace;
+    font-size: 0.75rem;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+  }
+  #progress-bar {
+    height: 3px;
+    background: var(--accent);
+    width: 0%;
+    transition: width 1s linear;
+  }
+  #stage { max-width: 900px; margin: 0 auto; }
+  #current-img-wrap {
+    width: 100%;
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    overflow: hidden;
+    background: #000;
+    display: none;
+    position: relative;
+  }
+  #current-img-wrap img {
+    width: 100%;
+    height: auto;
+    display: block;
+    max-height: 80vh;
+    object-fit: contain;
+    opacity: 0;
+    transition: opacity 0.8s ease;
+  }
+  #current-img-wrap img.loaded { opacity: 1; }
+  #img-counter {
+    position: absolute;
+    top: 0.6rem;
+    right: 0.75rem;
+    font-family: monospace;
+    font-size: 0.7rem;
+    color: rgba(255,255,255,0.5);
+    background: rgba(0,0,0,0.5);
+    padding: 0.2rem 0.5rem;
+    border-radius: 2px;
+  }
+  #img-loading {
+    display: none;
+    position: absolute;
+    inset: 0;
+    align-items: center;
+    justify-content: center;
+    font-family: monospace;
+    font-size: 0.75rem;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+  #waiting {
+    width: 100%;
+    aspect-ratio: 16/9;
+    border: 1px dashed var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+  }
+  #waiting .lock { font-size: 3rem; opacity: 0.15; }
+  #waiting .next-label {
+    font-family: monospace;
+    font-size: 0.8rem;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  #countdown-big {
+    font-family: monospace;
+    font-size: clamp(2rem, 8vw, 4rem);
+    color: var(--accent);
+    letter-spacing: 0.1em;
+  }
+  #next-btn {
+    display: none;
+    margin: 1.5rem auto 0;
+    padding: 0.7rem 2rem;
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    font-size: 0.9rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    border-radius: 2px;
+    font-family: Georgia, serif;
+    transition: background 0.2s, color 0.2s;
+  }
+  #next-btn:hover { background: var(--accent); color: #0d0d0d; }
+  #next-btn:disabled {
+    border-color: var(--border);
+    color: var(--muted);
+    cursor: not-allowed;
+    background: transparent;
+  }
+  #thumb-strip {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1.5rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .thumb {
+    width: 60px;
+    height: 45px;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.65rem;
+    color: var(--muted);
+    font-family: monospace;
+    flex-shrink: 0;
+  }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .thumb.revealed { border-color: var(--accent); }
+  .thumb.active   { border-color: #fff; box-shadow: 0 0 0 1px #fff; }
+  #done-msg {
+    display: none;
+    text-align: center;
+    margin-top: 2rem;
+    font-family: monospace;
+    font-size: 0.85rem;
+    color: var(--accent);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  #error-msg {
+    display: none;
+    text-align: center;
+    margin-top: 1rem;
+    font-family: monospace;
+    font-size: 0.75rem;
+    color: #c0392b;
+    letter-spacing: 0.05em;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Timed Reveal</h1>
+  <p>Alle 1 Minute wird das n&#228;chste Bild geladen</p>
+</header>
+
+<div id="progress-wrap">
+  <div id="progress-label">
+    <span id="prog-text">Startet&#8230;</span>
+    <span id="prog-next"></span>
+  </div>
+  <div id="progress-bar"></div>
+</div>
+
+<div id="stage">
+  <div id="waiting">
+    <div class="lock">&#128274;</div>
+    <div class="next-label">N&#228;chstes Bild in</div>
+    <div id="countdown-big">01:00</div>
+  </div>
+
+  <div id="current-img-wrap">
+    <img id="current-img" src="" alt="">
+    <div id="img-loading">Lade Bild&#8230;</div>
+    <div id="img-counter"></div>
+  </div>
+
+  <button id="next-btn">&#9654; N&#228;chstes Bild</button>
+
+  <div id="thumb-strip"></div>
+  <div id="done-msg">&#10003; Alle Bilder enthuellt</div>
+  <div id="error-msg"></div>
+</div>
+
+<script>
+  var IMAGE_COUNT  = 10;
+  var IMAGE_EXT    = 'JPG';
+  var INTERVAL_MS  = 1 * 60 * 1000; // 1 Minute
+
+  function imageUrl(n) {
+    return n + '.' + IMAGE_EXT;
+  }
+
+  var startTime    = Date.now();
+  var lastRevealed = 0;
+  var tickTimer    = null;
+
+  var progBar    = document.getElementById('progress-bar');
+  var progText   = document.getElementById('prog-text');
+  var progNext   = document.getElementById('prog-next');
+  var waitingEl  = document.getElementById('waiting');
+  var imgWrap    = document.getElementById('current-img-wrap');
+  var currentImg = document.getElementById('current-img');
+  var imgLoading = document.getElementById('img-loading');
+  var imgCounter = document.getElementById('img-counter');
+  var thumbStrip = document.getElementById('thumb-strip');
+  var cdBig      = document.getElementById('countdown-big');
+  var doneMsg    = document.getElementById('done-msg');
+  var errorMsg   = document.getElementById('error-msg');
+  var nextBtn    = document.getElementById('next-btn');
+
+  for (var i = 1; i <= IMAGE_COUNT; i++) {
+    var t = document.createElement('div');
+    t.className = 'thumb';
+    t.id = 'thumb-' + i;
+    t.textContent = i;
+    thumbStrip.appendChild(t);
+  }
+
+  function formatMMSS(ms) {
+    if (ms <= 0) return '00:00';
+    var s   = Math.floor(ms / 1000);
+    var m   = Math.floor(s / 60);
+    var sec = s % 60;
+    return (m < 10 ? '0' : '') + m + ':' + (sec < 10 ? '0' : '') + sec;
+  }
+
+  function updateNextBtn() {
+    if (lastRevealed >= IMAGE_COUNT) {
+      nextBtn.style.display = 'none';
+    } else {
+      nextBtn.style.display = 'block';
+      nextBtn.disabled = false;
+      nextBtn.textContent = '\u25b6 N\u00e4chstes Bild (' + (lastRevealed + 1) + '/' + IMAGE_COUNT + ')';
+    }
+  }
+
+  function revealImage(index, fromButton) {
+    if (index < 1 || index > IMAGE_COUNT) return;
+
+    var url = imageUrl(index);
+    imgLoading.style.display = 'flex';
+    currentImg.classList.remove('loaded');
+    waitingEl.style.display = 'none';
+    imgWrap.style.display   = 'block';
+    imgCounter.textContent  = index + ' / ' + IMAGE_COUNT;
+    errorMsg.style.display  = 'none';
+
+    if (fromButton) {
+      startTime = Date.now() - (index - 1) * INTERVAL_MS;
+    }
+
+    var img = new Image();
+    img.onload = function() {
+      currentImg.src = url;
+      imgLoading.style.display = 'none';
+      setTimeout(function() { currentImg.classList.add('loaded'); }, 30);
+
+      var thumb = document.getElementById('thumb-' + index);
+      if (thumb && !thumb.querySelector('img')) {
+        var ti = document.createElement('img');
+        ti.src = url;
+        ti.alt = '';
+        thumb.innerHTML = '';
+        thumb.appendChild(ti);
+      }
+      if (thumb) thumb.classList.add('revealed');
+    };
+    img.onerror = function() {
+      imgLoading.style.display = 'none';
+      errorMsg.textContent = 'Bild ' + index + '.' + IMAGE_EXT + ' konnte nicht geladen werden.';
+      errorMsg.style.display = 'block';
+    };
+    img.src = url;
+
+    for (var j = 1; j < index; j++) {
+      var th = document.getElementById('thumb-' + j);
+      if (th) th.classList.add('revealed');
+    }
+
+    document.querySelectorAll('.thumb').forEach(function(th) { th.classList.remove('active'); });
+    var active = document.getElementById('thumb-' + index);
+    if (active) active.classList.add('active');
+
+    lastRevealed = index;
+    updateNextBtn();
+  }
+
+  nextBtn.addEventListener('click', function() {
+    var next = lastRevealed + 1;
+    if (next > IMAGE_COUNT) return;
+    nextBtn.disabled = true;
+    revealImage(next, true);
+
+    if (next >= IMAGE_COUNT) {
+      progBar.style.width = '100%';
+      progText.textContent = 'Alle Bilder enthuellt';
+      progNext.textContent = '';
+      doneMsg.style.display = 'block';
+      nextBtn.style.display = 'none';
+      clearInterval(tickTimer);
+    }
+  });
+
+  function tick() {
+    var elapsed     = Date.now() - startTime;
+    var revealIndex = Math.min(Math.floor(elapsed / INTERVAL_MS) + 1, IMAGE_COUNT);
+
+    if (revealIndex > lastRevealed) {
+      revealImage(revealIndex, false);
+    }
+
+    if (lastRevealed >= IMAGE_COUNT) {
+      progBar.style.width = '100%';
+      progText.textContent = 'Alle Bilder enthuellt';
+      progNext.textContent = '';
+      doneMsg.style.display = 'block';
+      nextBtn.style.display = 'none';
+      clearInterval(tickTimer);
+      return;
+    }
+
+    var segStart   = INTERVAL_MS * (lastRevealed - 1);
+    var segElapsed = elapsed - segStart;
+    var pct        = Math.min(100, (segElapsed / INTERVAL_MS) * 100);
+    progBar.style.width = pct + '%';
+
+    var nextRevealAt = INTERVAL_MS * lastRevealed;
+    var remaining    = nextRevealAt - elapsed;
+    var cd           = formatMMSS(remaining);
+
+    progText.textContent = 'N\u00e4chstes Bild (' + (lastRevealed + 1) + '/' + IMAGE_COUNT + ') in';
+    progNext.textContent = cd;
+    cdBig.textContent    = cd;
+  }
+
+  tick();
+  tickTimer = setInterval(tick, 1000);
+</script>
+</body>
+</html>
